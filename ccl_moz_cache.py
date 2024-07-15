@@ -35,7 +35,7 @@ import io
 import email
 
 
-__version__ = "0.0.2"
+__version__ = "0.1"
 __description__ = "Library for reading Mozilla Firefox Cache (v2 Entries version)"
 __contact__ = "Alex Caithness"
 
@@ -460,13 +460,3 @@ class CacheFile:
     @property
     def metadata(self) -> CacheFileMetadata:
         return self._metadata
-
-
-if __name__ == '__main__':
-    folder = pathlib.Path(sys.argv[1])
-
-    for file_path in folder.iterdir():
-        print(file_path.name)
-        cache_file = CacheFile.from_file(file_path)
-        print(cache_file.metadata.key.raw_key)
-        print(cache_file.metadata.key.url)
