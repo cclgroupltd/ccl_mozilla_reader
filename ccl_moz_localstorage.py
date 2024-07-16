@@ -211,8 +211,7 @@ class LocalStoreDb:
         self.close()
 
 
-
 if __name__ == '__main__':
     db = LocalStoreDb(pathlib.Path(sys.argv[1]))
-    for rec in db.iter_records_for_storage_key(re.compile(r"bbc.co.uk")):
+    for rec in db.iter_all_records():
         print(rec)
