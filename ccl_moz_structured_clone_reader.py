@@ -5,17 +5,19 @@ import os
 import re
 import struct
 import sys
+import types
 import typing
 
 
 # /js/src/vm/StructuredClone.cpp and in particular JSStructuredCloneWriter::startWrite(HandleValue v)
-
+# also: dom/base/StructuredCloneHolder.cpp and in particular: StructuredCloneHolder::CustomWriteHandler
+# also: dom/indexedDB/IndexedDatabase.cpp
 
 class EndOfKeysException(Exception):
     ...  # thrown when an end of keys tag is encountered to be handled by the collection readers
 
 
-class StrcuctedCloneReaderError(Exception):
+class StructuredCloneReaderError(Exception):
     ...
 
 
@@ -27,7 +29,9 @@ class JsArray:
         if any(not isinstance(x, int) for x in initial_contents.keys()):
             raise TypeError("All keys in a JsArray must be of type int")
         self._backing = dict(initial_contents)
-        self._max_index = max(self._backing.keys())
+        self._max_index = -1
+        if self._backing:
+            self._max_index = max(self._backing.keys())
         self._default = default
         self._frozen = False
 
@@ -55,7 +59,7 @@ class JsArray:
         self._backing[key] = value
 
     def __repr__(self):
-        item_strings = ", ".join(str(x) for x in self)
+        item_strings = ", ".join(repr(x) for x in self)
         return f"[{item_strings}]"
 
 
@@ -80,20 +84,20 @@ class ScalarType(enum.IntEnum):
     Int64 = enum.auto()
     Simd128 = enum.auto()
 
-    def data_to_array(self, data: bytes, element_count):
+    def data_to_array(self, data: bytes, element_count: int, start_offset: int):
         if len(data) == 0:
             return []
         element_size = _SCALAR_TYPE_ELEMENT_LENGTH[self]
-        if len(data) / element_size < element_count:
+        if (len(data) - start_offset) / element_size < element_count:
             raise ValueError(
                 f"Invalid length for data to be converted to a typed array of {self.name} of length {element_count}")
 
         # special case for Uint8Clamped as it's usually just a byte array
-        if self.Uint8Clamped:
-            return data[0:element_count]
+        if self == self.Uint8Clamped:
+            return data[start_offset:start_offset + element_count]
 
         struct_fmt = f"<{element_count}{_SCALAR_TYPE_STRUCT_CODE[self]}"
-        return struct.unpack(struct_fmt, data[0:element_count*element_size])
+        return struct.unpack(struct_fmt, data[start_offset:(element_count * element_size) + start_offset])
 
 
 _SCALAR_TYPE_ELEMENT_LENGTH = {
@@ -255,6 +259,15 @@ class StructuredDataType(enum.IntEnum):
     DOM_ENCODEDAUDIOCHUNK = enum.auto()
 
 
+class CryptoType(enum.IntEnum):
+    AES = 0
+    HMAC = enum.auto()
+    RSA = enum.auto()
+    EC = enum.auto()
+    KDF = enum.auto()
+    ED = enum.auto()
+
+
 @dataclasses.dataclass(frozen=True)
 class Pair:
     data: int
@@ -286,9 +299,33 @@ class _Undefined:
         return "<Undefined>"
 
 
-@dataclasses.dataclass
-class BackReference:
+# @dataclasses.dataclass
+# class BackReference:
+#     index: int
+
+
+@dataclasses.dataclass(frozen=True)
+class Blob:
     index: int
+    size: int
+    mimetype: str
+
+
+@dataclasses.dataclass
+class File:
+    index: int
+    size: int
+    mimetype: str
+    last_modified: typing.Optional[int]
+    name: str
+
+
+@dataclasses.dataclass(frozen=True)
+class CryptoKey:
+    sym: typing.Optional[bytes]
+    priv: typing.Optional[bytes]
+    pub: typing.Optional[bytes]
+    parameters: typing.Mapping
 
 
 class StructuredCloneReader:
@@ -299,7 +336,7 @@ class StructuredCloneReader:
 
         header_pair = self._read_pair()
         if header_pair.tag != StructuredDataType.HEADER:
-            raise StrcuctedCloneReaderError("Structured clone data does not start with HEADER")
+            raise StructuredCloneReaderError("Structured clone data does not start with HEADER")
 
         self._scope = header_pair.data
         self._flattened_objects = []
@@ -316,7 +353,7 @@ class StructuredCloneReader:
         start_offset = self._f.tell()
         data = self._f.read(length)
         if len(data) != length:
-            raise StrcuctedCloneReaderError(
+            raise StructuredCloneReaderError(
                 f"Could not read enough data at {start_offset} (wanted: {length}; got: {len(data)}")
         return start_offset, data
 
@@ -350,9 +387,17 @@ class StructuredCloneReader:
         val, = struct.unpack("<d", buff)
         return val
 
+    def read_structuredclonereader_string(self):
+        # from dom/indexedDB/IndexedDatabase.cpp used by some of the non-builtin types
+        string_length = self._read_uint()
+        self._align()
+        _, raw = self._read_raw(string_length)
+        self._align()
+        return raw.decode("utf-8")
+
     def _read_string_internal(self, pair: Pair) -> str:
         if pair.tag not in (StructuredDataType.STRING, StructuredDataType.STRING_OBJECT):
-            raise StrcuctedCloneReaderError(f"Unexpected tag in pair when reading string ({pair.tag})")
+            raise StructuredCloneReaderError(f"Unexpected tag in pair when reading string ({pair.tag})")
 
         # pair data contains the encoding and length
         if pair.data & 0x80000000 == 0:
@@ -377,10 +422,12 @@ class StructuredCloneReader:
         # length is expressed as a count of 64-bit allocations
         length = 8 * (pair.data & 0x7fffffff)
         is_negative = pair.data & 0x80000000 != 0
-        raw = self._read_raw(length)
+        _, raw = self._read_raw(length)
         # TODO: format into a bigint actually
-
-        return raw, is_negative
+        result = int.from_bytes(raw, "little", signed=False)
+        if is_negative:
+            result = -result
+        return result
 
     def _read_array(self, pair: Pair) -> JsArray:
         if pair.tag != StructuredDataType.ARRAY_OBJECT:
@@ -436,6 +483,23 @@ class StructuredCloneReader:
 
         return result
 
+    def _read_map(self, pair: Pair):
+        if pair.tag != StructuredDataType.MAP_OBJECT:
+            raise ValueError("Pair tag isn't MAP_OBJECT")
+
+        result = {}
+        self._flattened_objects.append(result)
+        while True:
+            try:
+                key = self._read()
+            except EndOfKeysException:
+                break
+
+            value = self._read()
+            result[key] = value
+
+        return result
+
     def _read_typed_array(self, pair: Pair, is_v1_format: bool):
         if is_v1_format:
             raise ValueError("v1 typed arrays not implemented")
@@ -461,21 +525,126 @@ class StructuredCloneReader:
             # have to do this test in case it was a backreference that we got
             raise TypeError("typed array must be backed by a bytes object")
 
-        return array_type.data_to_array(backing_buffer, element_count)
+        start_offset = self._read_ulong()
 
-    def _read(self, *expected_tags):
-        # Align to int64 before reading
+        return array_type.data_to_array(backing_buffer, element_count,start_offset)
+
+    def _read_blob(self, pair: Pair) -> Blob:
+        # dom/indexedDB/IndexedDatabase.cpp - ReadBlobOrFile
+        if pair.tag != StructuredDataType.DOM_BLOB:
+            raise ValueError("Pair tag isn't DOM_BLOB")
+        # the following reads are aligned:
+        size = self._read_ulong()
+        self._align()  # should be redundant really
+        mime_type = self.read_structuredclonereader_string()
+
+        # TODO: does this get backreferenced should it go into flattened objects?
+        return Blob(pair.data, size, mime_type)
+
+    def _read_file(self, pair: Pair):
+        if pair.tag not in (StructuredDataType.DOM_FILE, StructuredDataType.DOM_FILE_WITHOUT_LASTMODIFIEDDATE):
+            raise ValueError("Pair tag isn't DOM_FILE or DOM_FILE_WITHOUT_LASTMODIFIEDDATE")
+
+        # the following reads are aligned:
+        size = self._read_ulong()
+        self._align()  # should be redundant really
+        mime_type = self.read_structuredclonereader_string()
+
+        if pair.tag == StructuredDataType.DOM_FILE:
+            last_modified = self._read_long()  # todo: check datetime format
+        else:
+            last_modified = None
+        self._align()
+        name = self.read_structuredclonereader_string()
+
+        # TODO: does this get backreferenced should it go into flattened objects?
+        return File(pair.data, size, mime_type, last_modified, name)
+
+    def read_cryptokey(self, pair: Pair):
+        if pair.tag != StructuredDataType.DOM_CRYPTOKEY:
+            raise ValueError("Pair tag isn't DOM_CRYPTOKEY")
+        # dom/crypto/CryptoKey.cpp - CryptoKey::ReadStructuredClone
+        version = self._read_uint()
+        attributes = self._read_uint()  # todo: parse flags
+
+        if version != 1:
+            raise StructuredCloneReaderError(f"Invalid cryptokey version - expected: 1; got: {version}")
+
+        # reads beyond this point should be aligned
+        _, sym_key_length = self._read_uint(), self._read_uint()
+        _, sym_key = self._read_raw(sym_key_length)
+        self._align()
+
+        _, priv_key_length = self._read_uint(), self._read_uint()
+        _, priv_key = self._read_raw(priv_key_length)
+        self._align()
+
+        _, pub_key_length = self._read_uint(), self._read_uint()
+        _, pub_key = self._read_raw(pub_key_length)
+        self._align()
+
+        # dom/crypto/KeyAlgorithmProxy.cpp - KeyAlgorithmProxy::ReadStructuredClone
+        _, name_length = self._read_uint(), self._read_uint()
+        _, name = self._read_raw(name_length * 2)  # UTF-16, length is codepoints
+        name = name.decode("utf-16-le")
+        self._align()
+
+        proxy_version, algo = self._read_uint(), CryptoType(self._read_uint())
+        if proxy_version != 1:
+            raise StructuredCloneReaderError(f"Invalid cryptokey version - expected: 1; got: {version}")
+
+        parameters = {}
+        match algo:
+            case CryptoType.AES:
+                _, length = self._read_uint(), self._read_uint()
+                parameters["length"] = length
+            case CryptoType.KDF:
+                pass
+            case CryptoType.HMAC:
+                _, length = self._read_uint(), self._read_uint()
+                _, hashname_length = self._read_uint(), self._read_uint()
+                _, hash_name = self._read_raw(hashname_length * 2)  # utf-16
+                self._align()
+                parameters["length"] = length
+                parameters["hash"] = hash_name.decode("utf-16-le")
+            case CryptoType.RSA:
+                _, modulus_length = self._read_uint(), self._read_uint()
+                _, public_exponent_length = self._read_uint(), self._read_uint()
+                _, public_exponent = self._read_raw(public_exponent_length)
+                self._align()
+                _, hashname_length = self._read_uint(), self._read_uint()
+                _, hash_name = self._read_raw(hashname_length * 2)  # utf-16
+                self._align()
+                parameters["modulus_length"] = modulus_length
+                parameters["public_exponent"] = public_exponent
+                parameters["hash"] = hash_name.decode("utf-16-le")
+            case CryptoType.EC:
+                _, named_curve_length = self._read_uint(), self._read_uint()
+                _, named_curve = self._read_raw(named_curve_length * 2)  # utf-16
+                self._align()
+                parameters["named_curve"] = named_curve
+            case CryptoType.ED:
+                pass
+            case _:
+                raise ValueError(f"Unexpected CryptoType: {CryptoType.name}")
+
+        return CryptoKey(sym_key or None, priv_key or None, pub_key or None, types.MappingProxyType(parameters))
+
+    def _align(self):
         alignment = self._f.tell() % 8
         if alignment != 0:
             self._f.seek(8 - alignment, os.SEEK_CUR)
 
+    def _read(self, *expected_tags):
+        # Align to int64 before reading each pair
+        self._align()
         start_offset = self._f.tell()
         print(f"reading new pair at {start_offset}")
         pair = self._read_pair()
         print(f"pair is {pair}")
 
         if expected_tags and pair.tag not in expected_tags:
-            raise StrcuctedCloneReaderError(f"Expected a pair with one of: {', '.join(expected_tags)}, but got {pair.tag}")
+            raise StructuredCloneReaderError(f"Expected a pair with one of: {', '.join(expected_tags)}, but got {pair.tag}")
 
         if pair.tag < StructuredDataType.FLOAT_MAX:
             return pair.to_double()
@@ -535,23 +704,31 @@ class StructuredCloneReader:
                 self._flattened_objects[dummy_object_index] = result
                 return result
             case StructuredDataType.MAP_OBJECT:
-                raise NotImplementedError()
+                return self._read_map(pair)
             case StructuredDataType.SET_OBJECT:
                 return self._read_set(pair)  # added to flattened_objects in the method
             case StructuredDataType.ARRAY_BUFFER_OBJECT:
                 array_length = self._read_ulong()
-                result = self._read_raw(array_length)
+                _, result = self._read_raw(array_length)
                 self._flattened_objects.append(result)
                 return result
             case StructuredDataType.ARRAY_BUFFER_OBJECT_V2:
                 array_length = pair.data
-                result = self._read_raw(array_length)
+                _, result = self._read_raw(array_length)
                 self._flattened_objects.append(result)
                 return result
+            case StructuredDataType.DOM_BLOB:
+                return self._read_blob(pair)
+            case StructuredDataType.DOM_FILE | StructuredDataType.DOM_FILE_WITHOUT_LASTMODIFIEDDATE:
+                return self._read_file(pair)
+            case StructuredDataType.DOM_FILELIST:
+                raise NotImplementedError()
+            case StructuredDataType.DOM_CRYPTOKEY:
+                return self.read_cryptokey(pair)
             case StructuredDataType.END_OF_KEYS:
                 raise EndOfKeysException()
             case _:
-                raise NotImplementedError(f"datatype not supported: {pair.tag}")
+                raise NotImplementedError(f"datatype not supported: {pair.tag.name}")
 
     def read_root(self):
         return self._read()
@@ -562,3 +739,4 @@ if __name__ == '__main__':
         reader = StructuredCloneReader(f)
 
         print(reader.read_root())
+
