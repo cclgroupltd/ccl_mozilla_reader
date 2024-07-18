@@ -639,9 +639,9 @@ class StructuredCloneReader:
         # Align to int64 before reading each pair
         self._align()
         start_offset = self._f.tell()
-        print(f"reading new pair at {start_offset}")
+        # print(f"reading new pair at {start_offset}")
         pair = self._read_pair()
-        print(f"pair is {pair}")
+        # print(f"pair is {pair}")
 
         if expected_tags and pair.tag not in expected_tags:
             raise StructuredCloneReaderError(f"Expected a pair with one of: {', '.join(expected_tags)}, but got {pair.tag}")
