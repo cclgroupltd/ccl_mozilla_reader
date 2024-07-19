@@ -7,6 +7,7 @@ import struct
 import sys
 import types
 import typing
+import inspect
 
 
 # /js/src/vm/StructuredClone.cpp and in particular JSStructuredCloneWriter::startWrite(HandleValue v)
@@ -21,46 +22,46 @@ class StructuredCloneReaderError(Exception):
     ...
 
 
-class JsArray:
-    """
-    A wrapper around a dict to act like sparse JavaScript array
-    """
-    def __init__(self, initial_contents: dict[int, typing.Any], default):
-        if any(not isinstance(x, int) for x in initial_contents.keys()):
-            raise TypeError("All keys in a JsArray must be of type int")
-        self._backing = dict(initial_contents)
-        self._max_index = -1
-        if self._backing:
-            self._max_index = max(self._backing.keys())
-        self._default = default
-        self._frozen = False
-
-    def freeze(self):
-        self._frozen = True
-
-    def __len__(self):
-        return self._max_index + 1
-
-    def __iter__(self):
-        for i in range(len(self)):
-            yield self._backing[i] if i in self._backing else self._default
-
-    def __getitem__(self, item: int):
-        self._backing.get(item, self._default)
-
-    def __setitem__(self, key: int, value: typing.Any):
-        if self._frozen:
-            raise ValueError("Array is frozen")
-        if not isinstance(key, int):
-            raise TypeError("All keys in a JsArray must be of type int")
-        if key > self._max_index:
-            self._max_index = key
-
-        self._backing[key] = value
-
-    def __repr__(self):
-        item_strings = ", ".join(repr(x) for x in self)
-        return f"[{item_strings}]"
+# class JsArray:
+#     """
+#     A wrapper around a dict to act like sparse JavaScript array
+#     """
+#     def __init__(self, initial_contents: dict[int, typing.Any], default):
+#         if any(not isinstance(x, int) for x in initial_contents.keys()):
+#             raise TypeError("All keys in a JsArray must be of type int")
+#         self._backing = dict(initial_contents)
+#         self._max_index = -1
+#         if self._backing:
+#             self._max_index = max(self._backing.keys())
+#         self._default = default
+#         self._frozen = False
+#
+#     def freeze(self):
+#         self._frozen = True
+#
+#     def __len__(self):
+#         return self._max_index + 1
+#
+#     def __iter__(self):
+#         for i in range(len(self)):
+#             yield self._backing[i] if i in self._backing else self._default
+#
+#     def __getitem__(self, item: int):
+#         self._backing.get(item, self._default)
+#
+#     def __setitem__(self, key: int, value: typing.Any):
+#         if self._frozen:
+#             raise ValueError("Array is frozen")
+#         if not isinstance(key, int):
+#             raise TypeError("All keys in a JsArray must be of type int")
+#         if key > self._max_index:
+#             self._max_index = key
+#
+#         self._backing[key] = value
+#
+#     def __repr__(self):
+#         item_strings = ", ".join(repr(x) if x is not self else "[...]" for x in self)
+#         return f"[{item_strings}]"
 
 
 class ScalarType(enum.IntEnum):
@@ -328,6 +329,24 @@ class CryptoKey:
     parameters: typing.Mapping
 
 
+def unsparse_array(result: list, length: int, sparse_dict: dict[int, typing.Any], default) -> list:
+    if len(sparse_dict) == 0:
+        return []
+
+    if any(not isinstance(x, int) or x < 0 for x in sparse_dict.keys()):
+        raise ValueError("all dict keys must be positive ints for a sparse array")
+
+    if max(sparse_dict.keys()) >= length:
+        raise ValueError("length is too low for the maximum key")
+
+    result.clear()
+    result.extend(default for _ in range(length))
+    for k, v in sparse_dict.items():
+        result[k] = v
+
+    return result
+
+
 class StructuredCloneReader:
     UNDEFINED = _Undefined()
 
@@ -429,11 +448,14 @@ class StructuredCloneReader:
             result = -result
         return result
 
-    def _read_array(self, pair: Pair) -> JsArray:
+    def _read_array(self, pair: Pair) -> list:
         if pair.tag != StructuredDataType.ARRAY_OBJECT:
             raise ValueError("Pair tag isn't ARRAY_OBJECT")
 
-        result = JsArray({}, self.UNDEFINED)
+        array_length = pair.data
+
+        result = []
+        sparse_dict = {}
         self._flattened_objects.append(result)  # must be added before population
         while True:
             try:
@@ -443,9 +465,8 @@ class StructuredCloneReader:
 
             value = self._read()
 
-            result[key] = value
-
-        return result
+            sparse_dict[key] = value
+        return unsparse_array(result, array_length, sparse_dict, self.UNDEFINED)
 
     def _read_set(self, pair: Pair) -> set:
         if pair.tag != StructuredDataType.SET_OBJECT:
