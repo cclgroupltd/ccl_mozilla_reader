@@ -7,12 +7,12 @@ import struct
 import sys
 import types
 import typing
-import inspect
 
 
 # /js/src/vm/StructuredClone.cpp and in particular JSStructuredCloneWriter::startWrite(HandleValue v)
 # also: dom/base/StructuredCloneHolder.cpp and in particular: StructuredCloneHolder::CustomWriteHandler
 # also: dom/indexedDB/IndexedDatabase.cpp
+
 
 class EndOfKeysException(Exception):
     ...  # thrown when an end of keys tag is encountered to be handled by the collection readers
@@ -21,7 +21,7 @@ class EndOfKeysException(Exception):
 class StructuredCloneReaderError(Exception):
     ...
 
-
+# This causes issues when repr'ing
 # class JsArray:
 #     """
 #     A wrapper around a dict to act like sparse JavaScript array
@@ -272,7 +272,7 @@ class CryptoType(enum.IntEnum):
 @dataclasses.dataclass(frozen=True)
 class Pair:
     data: int
-    tag: StructuredDataType
+    tag: StructuredDataType | int
 
     def __post_init__(self):
         if self.data < 0 or self.tag < 0 or self.data > 0xffffffff or self.tag > 0xffffffff:
@@ -379,7 +379,10 @@ class StructuredCloneReader:
     def _read_pair(self) -> Pair:
         _, buff = self._read_raw(8)
         data, tag = struct.unpack("<2I", buff)
-        return Pair(data, StructuredDataType(tag))
+        if tag < StructuredDataType.FLOAT_MAX:
+            return Pair(data, tag)
+        else:
+            return Pair(data, StructuredDataType(tag))
 
     def _read_int(self) -> int:
         _, buff = self._read_raw(4)
