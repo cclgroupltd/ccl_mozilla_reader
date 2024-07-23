@@ -33,7 +33,8 @@ class MozillaIndexedDbRecord:
     object_store_meta: ObjectStoreMetadata
     key: ccl_moz_indexeddb_key.MozillaIdbKey
     value: typing.Any
-    #external_value_path: typing.Optional[str] = None
+    file_ids: tuple[str, ...]
+    external_value_path: typing.Optional[str] = None
 
     @property
     def origin_file(self) -> os.PathLike:
@@ -85,12 +86,13 @@ class MozillaIndexedDbDatabase:
         WHERE "object_data"."object_store_id" = ?;
     """
 
-    def __init__(self, db_path: pathlib.Path):
+    def __init__(self, db_path: pathlib.Path, external_data_callback: col_abc.Callable[["MozillaIndexedDbDatabase", str], typing.BinaryIO]):
         self._db_path = db_path
         if not db_path.is_file():
             raise FileNotFoundError(db_path)
         self._db = sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True)
         self._db.row_factory = sqlite3.Row
+        self._external_data_callback = external_data_callback
 
         cur = self._db.execute(MozillaIndexedDbDatabase.METADATA_QUERY)
         meta_row = cur.fetchone()
@@ -132,6 +134,7 @@ class MozillaIndexedDbDatabase:
 
         for row in cur:
             key = ccl_moz_indexeddb_key.MozillaIdbKey.from_bytes(row["key"])
+            file_ids = (row["file_ids"] or "").split()
             data_compressed = row["data"]
             if isinstance(data_compressed, bytes):
                 with io.BytesIO(data_compressed) as d:
@@ -139,10 +142,30 @@ class MozillaIndexedDbDatabase:
                 with io.BytesIO(data_decompressed) as d:
                     value_reader = ccl_moz_structured_clone_reader.StructuredCloneReader(d)
                     value = value_reader.read_root()
-            else:
-                continue  # TODO: externally held records
+            elif isinstance(data_compressed, int):
+                # externally held data, value is an int64 containing a 32-bit file index into file_ids and a flag in
+                # the 33rd bit indicating whether it's compressed
+                # see: /dom/indexedDB/ActorsParent.cpp ObjectStoreAddOrPutRequestOp::DoDatabaseWork
+                file_index = data_compressed & 0xffffffff
+                external_data_compressed = data_compressed & 0x100000000 != 0
+                if file_index >= len(file_ids):
+                    raise ValueError(f"External file index too large for record with key {key.raw_key.hex()}")
+                if not file_ids[file_index].startswith("."):
+                    raise ValueError(
+                        f"External record data file id does not start with '.' in record with key {key.raw_key.hex()}")
+                raw_external_data_stream = self._external_data_callback(self, file_ids[file_index].lstrip("."))
+                if external_data_compressed:
+                    with io.BytesIO() as external_data_decompressed:
+                        ccl_simplesnappy.decompress_framed(
+                            raw_external_data_stream, external_data_decompressed, mozilla_mode=True)
+                        external_data_decompressed.seek(0)
+                        value_reader = ccl_moz_structured_clone_reader.StructuredCloneReader(external_data_decompressed)
+                        value = value_reader.read_root()
+                else:
+                    value_reader = ccl_moz_structured_clone_reader.StructuredCloneReader(raw_external_data_stream)
+                    value = value_reader.read_root()
 
-            yield MozillaIndexedDbRecord(self, object_store_meta, key, value)
+            yield MozillaIndexedDbRecord(self, object_store_meta, key, value, file_ids)
 
         cur.close()
 
@@ -187,8 +210,53 @@ class MozillaIndexedDbDatabase:
         return f"<MozillaIndexedDbDatabase: \"{self.name}\" @ \"{self.db_path}\">"
 
 
-if __name__ == '__main__':
-    idb = MozillaIndexedDbDatabase(pathlib.Path(sys.argv[1]))
+class MozillaIndexedDb:
+    """
+    This class represents a whole "idb" folder, brokers access to each database and external files
+    """
 
-    for rec in idb.iter_records_for_object_store(1):
-        print(rec)
+    def __init__(self, idb_folder_path: pathlib.Path):
+        self._path = idb_folder_path
+        self._databases = [
+            MozillaIndexedDbDatabase(db_path, self._get_external_data) for db_path in self._path.glob("*.sqlite")
+        ]
+        self._external_file_lookup = {}  # {db_path: {file_id: file_path}}
+        for db in self._databases:
+            this_db_file_lookup = {}
+            self._external_file_lookup[db.db_path] = this_db_file_lookup
+            files_folder_path = db.db_path.with_suffix(".files")
+            if files_folder_path.is_dir():
+                for ext_file in files_folder_path.iterdir():
+                    if ext_file.is_file():
+                        this_db_file_lookup[ext_file.name] = ext_file
+
+    def _get_external_data(self, database: MozillaIndexedDbDatabase, ext_id: str) -> typing.Optional[typing.BinaryIO]:
+        if ext_id in self._external_file_lookup[database.db_path]:
+            return self._external_file_lookup[database.db_path][ext_id].open("rb")
+
+    @property
+    def databases(self):
+        yield from self._databases
+
+    @property
+    def path(self):
+        return self._path
+
+    def close(self):
+        for db in self._databases:
+            db.close()
+
+    def __enter__(self) -> "MozillaIndexedDb":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+
+if __name__ == '__main__':
+    idb = MozillaIndexedDb(pathlib.Path(sys.argv[1]))
+    for db in idb.databases:
+        for rec in db.iter_records_for_object_store(1):
+            print(rec.key)
+            print(rec.value)
+            print("=" * 72)
