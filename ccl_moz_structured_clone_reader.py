@@ -317,7 +317,7 @@ class File:
     index: int
     size: int
     mimetype: str
-    last_modified: typing.Optional[int]
+    last_modified: typing.Optional[datetime.datetime]
     name: str
 
 
@@ -575,13 +575,14 @@ class StructuredCloneReader:
         mime_type = self.read_structuredclonereader_string()
 
         if pair.tag == StructuredDataType.DOM_FILE:
-            last_modified = self._read_long()  # todo: check datetime format
+            last_modified = self._read_double()
+            last_modified = datetime.datetime(
+                1970, 1, 1) + datetime.timedelta(milliseconds=last_modified)
         else:
             last_modified = None
         self._align()
         name = self.read_structuredclonereader_string()
 
-        # TODO: does this get backreferenced should it go into flattened objects?
         return File(pair.data, size, mime_type, last_modified, name)
 
     def read_cryptokey(self, pair: Pair):
@@ -744,7 +745,9 @@ class StructuredCloneReader:
             case StructuredDataType.DOM_BLOB:
                 return self._read_blob(pair)
             case StructuredDataType.DOM_FILE | StructuredDataType.DOM_FILE_WITHOUT_LASTMODIFIEDDATE:
-                return self._read_file(pair)
+                result = self._read_file(pair)
+                self._flattened_objects.append(result)
+                return result
             case StructuredDataType.DOM_FILELIST:
                 raise NotImplementedError()
             case StructuredDataType.DOM_CRYPTOKEY:
