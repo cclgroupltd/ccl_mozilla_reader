@@ -22,12 +22,13 @@ SOFTWARE.
 
 import sys
 import pathlib
-import moz_lz4
 import dataclasses
 import typing
 import re
 import collections.abc as col_abc
-from common import KeySearch, is_keysearch_hit
+from .common import KeySearch, is_keysearch_hit
+from .storage_formats import moz_lz4
+
 
 __version__ = "0.1"
 __description__ = "Library for reading Mozilla Firefox session storage"
@@ -165,8 +166,8 @@ class SessionStorage:
             raise TypeError("item must be a string or a tuple of (str, str)")
 
 
-if __name__ == '__main__':
-    ss = SessionStorage(pathlib.Path(sys.argv[1]))
-
-    for record in ss.iter_all_records():
-        print(record)
+# if __name__ == '__main__':
+#     ss = SessionStorage(pathlib.Path(sys.argv[1]))
+#
+#     for record in ss.iter_all_records():
+#         print(record)

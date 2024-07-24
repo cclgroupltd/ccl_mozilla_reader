@@ -26,7 +26,6 @@ import enum
 import math
 import os
 import pathlib
-import sys
 import types
 import typing
 import struct

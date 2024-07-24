@@ -28,16 +28,14 @@ import sqlite3
 import typing
 import datetime
 import os
-import collections.abc as col_abc
 
-import ccl_moz_indexeddb_key
-import ccl_moz_structured_clone_reader
-import ccl_simplesnappy
+from . import ccl_moz_indexeddb_key
+from .serialization_formats import ccl_moz_structured_clone_reader
+from .storage_formats import ccl_simplesnappy
 
 __version__ = "0.1"
 __description__ = "Library for reading Mozilla Firefox IndexedDB"
 __contact__ = "Alex Caithness"
-
 
 
 UNIX_EPOCH = datetime.datetime(1970, 1, 1)
@@ -294,10 +292,10 @@ class MozillaIndexedDb:
         self.close()
 
 
-if __name__ == '__main__':
-    idb = MozillaIndexedDb(pathlib.Path(sys.argv[1]))
-    for db in idb.databases:
-        for rec in db.iter_records_for_object_store(1):
-            print(rec.key)
-            print(rec.value)
-            print("=" * 72)
+# if __name__ == '__main__':
+#     idb = MozillaIndexedDb(pathlib.Path(sys.argv[1]))
+#     for db in idb.databases:
+#         for rec in db.iter_records_for_object_store(1):
+#             print(rec.key)
+#             print(rec.value)
+#             print("=" * 72)

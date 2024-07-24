@@ -32,7 +32,7 @@ import datetime
 import json
 import collections.abc as col_abc
 
-from common import KeySearch
+from .common import KeySearch
 
 __version__ = "0.1"
 __description__ = "Library for reading Mozilla Firefox history and downloads from the places database"
@@ -300,8 +300,8 @@ class MozillaPlacesDatabase:
         self.close()
 
 
-if __name__ == '__main__':
-    with MozillaPlacesDatabase(pathlib.Path(sys.argv[1])) as places:
-        for rec in places.iter_history_records(None):
-            print(rec)
-            print()
+# if __name__ == '__main__':
+#     with MozillaPlacesDatabase(pathlib.Path(sys.argv[1])) as places:
+#         for rec in places.iter_history_records(None):
+#             print(rec)
+#             print()

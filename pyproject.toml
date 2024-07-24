@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "ccl_mozilla_reader",
+]
+
+[project]
+name = "ccl_mozilla_reader"
+version = "0.0.1"
+authors = [
+  { name="Alex Caithness", email="research@cclsolutionsgroup.com" },
+]
+description = "(Sometimes partial) Python re-implementations of the technologies involved in reading various data sources in Firefox and some derrived browsers"
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+]
+keywords = ["digital forensics", "dfir", "mozilla", "firefox", "browser"]
+dependencies = [
+    "lz4==4.3.3",
+]
+
+[project.urls]
+Homepage = "https://github.com/cclgroupltd/ccl_mozilla_reader"
+Issues = "https://github.com/cclgroupltd/ccl_mozilla_reader/issues"

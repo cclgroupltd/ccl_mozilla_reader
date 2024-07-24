@@ -31,9 +31,9 @@ import types
 import collections.abc as col_abc
 import typing
 
-import ccl_simplesnappy
-from storage_common import MetadataV2
-from common import KeySearch, is_keysearch_hit
+from .storage_formats import ccl_simplesnappy
+from .storage_common import MetadataV2
+from .common import KeySearch, is_keysearch_hit
 
 
 __version__ = "0.1"
@@ -233,7 +233,7 @@ class LocalStoreDb:
         self.close()
 
 
-if __name__ == '__main__':
-    db = LocalStoreDb(pathlib.Path(sys.argv[1]))
-    for rec in db.iter_all_records():
-        print(rec)
+# if __name__ == '__main__':
+#     db = LocalStoreDb(pathlib.Path(sys.argv[1]))
+#     for rec in db.iter_all_records():
+#         print(rec)
