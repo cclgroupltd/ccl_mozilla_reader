@@ -7,6 +7,7 @@ import sqlite3
 import typing
 import dataclasses
 import datetime
+import json
 import collections.abc as col_abc
 
 from common import KeySearch, is_keysearch_hit
@@ -22,6 +23,10 @@ def parse_unix_microseconds(microseconds: int) -> datetime.datetime:
     return EPOCH + datetime.timedelta(microseconds=microseconds)
 
 
+def parse_unix_milliseconds(milliseconds: int) -> datetime.datetime:
+    return EPOCH + datetime.timedelta(milliseconds=milliseconds)
+
+
 class VisitType(enum.IntEnum):
     # /toolkit/components/places/nsINavHistoryService.idl
     link = 1
@@ -33,6 +38,18 @@ class VisitType(enum.IntEnum):
     download = 7
     framed_link = 8
     reload = 9
+
+
+class DownloadState(enum.IntEnum):
+    # toolkit/components/downloads/DownloadHistory.sys.mjs
+    unknown = 0
+
+    finished = 1
+    failed = 2
+    cancelled = 3
+    paused = 4
+    blocked_parental = 6
+    dirty = 8
 
 
 @dataclasses.dataclass(frozen=True)
@@ -68,6 +85,15 @@ class MozillaHistoryRecord:
         return self._owner.get_children_of(self)
 
 
+@dataclasses.dataclass(frozen=True)
+class MozillaDownload(MozillaHistoryRecord):
+    downloaded_location: str
+    deleted: bool
+    end_time: datetime.datetime
+    file_size: typing.Optional[int]
+    download_state: DownloadState
+
+
 class MozillaPlacesDatabase:
     _HISTORY_QUERY = """
     SELECT 
@@ -75,6 +101,7 @@ class MozillaPlacesDatabase:
         "moz_places"."url",
         "moz_places"."title",
         "moz_places"."guid",
+        "moz_places"."id" AS "place_id",
         "moz_historyvisits"."visit_date",
         "moz_historyvisits"."visit_type",
         "moz_historyvisits"."from_visit"
@@ -94,6 +121,22 @@ class MozillaPlacesDatabase:
     _WHERE_VISIT_ID_EQUALS_PREDICATE = """"moz_historyvisits"."id" = ?"""
 
     _WHERE_FROM_VISIT_EQUALS_PREDICATE = """"moz_historyvisits"."from_visit" = ?"""
+
+    _WHERE_VISIT_IS_DOWNLOAD_PREDICATE = f""""moz_historyvisits"."visit_type" = {VisitType.download.value}"""
+
+    _DOWNLOAD_ATTRIBUTES_QUERY = """
+        SELECT 
+          "moz_anno_attributes"."name",
+          "moz_annos"."content",
+          "moz_annos"."dateAdded",
+          "moz_annos"."lastModified"
+        FROM "moz_annos"
+        INNER JOIN "moz_anno_attributes"
+        ON "moz_annos"."anno_attribute_id" = "moz_anno_attributes"."id"
+        WHERE "moz_annos"."place_id" = ?;"""
+
+    _DOWNLOAD_DESTINATION_FILE_URI_KEY = "downloads/destinationFileURI"
+    _DOWNLOAD_METADATA_KEY = "downloads/metaData"
 
     def __init__(self, places_db_path: pathlib.Path):
         self._conn = sqlite3.connect(places_db_path.as_uri() + "?mode=ro", uri=True)
@@ -191,6 +234,36 @@ class MozillaPlacesDatabase:
 
         cur.close()
 
+    def iter_downloads(self):
+        cur = self._conn.cursor()
+        attrib_cur = self._conn.cursor()
+
+        cur.execute(" ".join(
+            (MozillaPlacesDatabase._HISTORY_QUERY,
+             "WHERE",
+             MozillaPlacesDatabase._WHERE_VISIT_IS_DOWNLOAD_PREDICATE)) + ";")
+        for row in cur:
+            attrib_cur.execute(MozillaPlacesDatabase._DOWNLOAD_ATTRIBUTES_QUERY, (row["place_id"], ))
+            attributes = {x["name"]: x["content"] for x in attrib_cur}
+
+            metadata = json.loads(attributes.get(MozillaPlacesDatabase._DOWNLOAD_METADATA_KEY, "{}"))
+            file_location = attributes.get(MozillaPlacesDatabase._DOWNLOAD_DESTINATION_FILE_URI_KEY)
+
+            yield MozillaDownload(
+                self,
+                row["id"],
+                row["url"],
+                row["title"],
+                parse_unix_microseconds(row["visit_date"]),
+                VisitType(row["visit_type"]),
+                row["from_visit"],
+                file_location,
+                metadata.get("deleted"),
+                parse_unix_milliseconds(metadata.get("endTime", 0)),
+                metadata.get("fileSize"),
+                DownloadState(metadata.get("state"))
+            )
+
     def close(self):
         self._conn.close()
 
@@ -205,3 +278,4 @@ if __name__ == '__main__':
     with MozillaPlacesDatabase(pathlib.Path(sys.argv[1])) as places:
         for rec in places.iter_history_records(None):
             print(rec)
+            print()
