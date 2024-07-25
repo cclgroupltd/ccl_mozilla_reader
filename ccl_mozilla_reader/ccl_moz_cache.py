@@ -26,15 +26,19 @@ import enum
 import math
 import os
 import pathlib
+import re
 import types
 import typing
 import struct
 import collections.abc
 import io
 import email
+import collections.abc as col_abc
+
+from .common import KeySearch, is_keysearch_hit
 
 
-__version__ = "0.1"
+__version__ = "0.2"
 __description__ = "Library for reading Mozilla Firefox Cache (v2 Entries version)"
 __contact__ = "Alex Caithness"
 
@@ -168,6 +172,20 @@ class CacheKey:
         self._id_enhance = None
         self._origin_suffix = None
         self._read_tags()
+
+    def __repr__(self):
+        return f"<CacheKey {self._raw_key}>"
+
+    def __eq__(self, other):
+        if not isinstance(other, CacheKey):
+            raise TypeError("Can only compare with another CacheKey")
+        return self._raw_key == other.raw_key
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        return self._raw_key.__hash__()
 
     @property
     def url(self):
@@ -448,6 +466,18 @@ class CacheFile:
 
         return cls(path, metadata, data)
 
+    @staticmethod
+    def read_metadata(path: pathlib.Path) -> CacheFileMetadata:
+        with BinaryReader(path.open("rb")) as reader:
+            # read offset for metadata, and implicitly the data length
+            reader.seek(-4, os.SEEK_END)
+            offset = reader.read_uint32()
+            reader.seek(offset, os.SEEK_SET)
+            chunk_count = math.ceil(offset / CacheFile._CHUNK_SIZE)
+            metadata = CacheFileMetadata.from_reader(reader, chunk_count)
+
+        return metadata
+
     @property
     def path(self) -> pathlib.Path:
         return self._path
@@ -459,3 +489,94 @@ class CacheFile:
     @property
     def metadata(self) -> CacheFileMetadata:
         return self._metadata
+
+
+class MozillaCache:
+    _ENTRIES_FOLDER_NAME = "entries"
+
+    def __init__(self, cache_folder: pathlib.Path):
+        if not cache_folder.is_dir():
+            raise NotADirectoryError("cache_folder does not exist or it not a directory")
+        self._cache_folder = cache_folder
+        self._precached_metadata: typing.Optional[dict[CacheKey, tuple[pathlib.Path, CacheFileMetadata]]] = None
+        self._url_key_lookup: typing.Optional[dict[str, list[CacheKey]]] = None
+
+    def _make_url_key_lookup(self):
+        if self._precached_metadata is None:
+            raise ValueError("_precached_metadata not set")
+        # We make a URL lookup as cache keys are unique based on the whole key, but with partitioning etc.
+        # it is possible for the same *URL* to be duplicated, and that's what consumers will want to use
+        # almost every time.
+        self._url_key_lookup = {}
+        for key in self._precached_metadata.keys():
+            self._url_key_lookup.setdefault(key.url, [])
+            self._url_key_lookup[key.url].append(key)
+
+    def _precache_metadata(self):
+        if self._precached_metadata is not None:
+            raise ValueError("Precached metadata is already set")
+        self._precached_metadata = {}
+        for file in (self._cache_folder / MozillaCache._ENTRIES_FOLDER_NAME).iterdir():
+            if not file.is_file():
+                continue
+
+            metadata = CacheFile.read_metadata(file)
+            if metadata.key in self._precached_metadata:
+                raise KeyError("Duplicate key (shouldn't be possible)")
+
+            self._precached_metadata[metadata.key] = file, metadata
+
+    def iter_metadata(self, *, url: typing.Optional[KeySearch]=None):
+        self._precache_metadata()
+        self._make_url_key_lookup()
+
+        for file, metadata in self._precached_metadata.values():
+            yield metadata
+
+    def _iter_cache_all(self):
+        for file in (self._cache_folder / MozillaCache._ENTRIES_FOLDER_NAME).iterdir():
+            if not file.is_file():
+                continue
+            cache_file = CacheFile.from_file(file)
+            yield cache_file
+
+    def _iter_cache_filtered(self, search_url: KeySearch):
+        if self._precached_metadata is None:
+            self._precache_metadata()
+            self._make_url_key_lookup()
+
+        if isinstance(search_url, str):
+            for key in self._url_key_lookup.get(search_url, []):
+                file, meta = self._precached_metadata[key]
+                cache_file = CacheFile.from_file(file)
+                yield cache_file
+        elif isinstance(search_url, col_abc.Collection):
+            for url in search_url:
+                for key in self._url_key_lookup.get(url, []):
+                    file, meta = self._precached_metadata[key]
+                    cache_file = CacheFile.from_file(file)
+                    yield cache_file
+        elif isinstance(search_url, re.Pattern):
+            for url, keys in self._url_key_lookup.items():
+                if search_url.search(url) is not None:
+                    for key in keys:
+                        file, meta = self._precached_metadata[key]
+                        cache_file = CacheFile.from_file(file)
+                        yield cache_file
+        elif isinstance(search_url, col_abc.Callable):
+            for url, keys in self._url_key_lookup.items():
+                if search_url(url):
+                    for key in keys:
+                        file, meta = self._precached_metadata[key]
+                        cache_file = CacheFile.from_file(file)
+                        yield cache_file
+        else:
+            raise TypeError(f"Unexpected type: {type(search_url)} (expects: {KeySearch})")
+
+    def iter_cache(self, *, url: typing.Optional[KeySearch]=None):
+        if url is None:
+            yield from self._iter_cache_all()
+        else:
+            yield from self._iter_cache_filtered(url)
+
+
