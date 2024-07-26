@@ -19,7 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-
+import collections.abc
 import dataclasses
 import io
 import sys
@@ -29,6 +29,7 @@ import typing
 import datetime
 import os
 
+from . import storage_common
 from . import ccl_moz_indexeddb_key
 from .serialization_formats import ccl_moz_structured_clone_reader
 from .storage_formats import ccl_simplesnappy
@@ -232,6 +233,10 @@ class MozillaIndexedDbDatabase:
     def last_vacuum_size(self):
         return self._last_vacuum_size
 
+    @property
+    def object_stores(self) -> collections.abc.Iterable[ObjectStoreMetadata]:
+        yield from self._object_store_metas
+
     def close(self):
         self._db.close()
 
@@ -255,6 +260,7 @@ class MozillaIndexedDb:
         self._databases = [
             MozillaIndexedDbDatabase(db_path, self) for db_path in self._path.glob("*.sqlite")
         ]
+        self._database_lookup = {db.name: db for db in self._databases}
         self._external_file_lookup = {}  # {db_path: {file_id: file_path}}
         for db in self._databases:
             this_db_file_lookup = {}
@@ -264,6 +270,11 @@ class MozillaIndexedDb:
                 for ext_file in files_folder_path.iterdir():
                     if ext_file.is_file():
                         this_db_file_lookup[ext_file.name] = ext_file
+
+    def get_database(self, database_name: str):
+        if database_name in self._database_lookup:
+            return self._database_lookup[database_name]
+        raise KeyError(database_name)
 
     def get_external_data_stream(self, database: MozillaIndexedDbDatabase, ext_id: str) -> typing.Optional[typing.BinaryIO]:
         if ext_id in self._external_file_lookup[database.db_path]:
@@ -290,6 +301,47 @@ class MozillaIndexedDb:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
+
+
+class MozillaIndexedDbBag:
+    """A class managing access to all the indexeddb files in a profile folder"""
+    def __init__(self, storage_default_path: pathlib.Path):
+        """
+        Constructor
+
+        :param storage_default_path: path to the storage/default folder in a profile
+        """
+        if not storage_default_path.is_dir():
+            raise NotADirectoryError(f"\"{storage_default_path}\" does not exist or is not a directory")
+        self._path = storage_default_path
+
+        self._database_origins_path_lookup: dict[str, pathlib.Path] = {}
+        self._databases: dict[str, MozillaIndexedDb] = {}
+        for folder in self._path.iterdir():
+            idb_folder = folder / "idb"
+            if idb_folder.is_dir():
+                metadata = storage_common.MetadataV2.from_file(folder / ".metadata-v2")
+                if metadata.origin in self._database_origins_path_lookup:
+                    raise KeyError("Origin already in the bag")
+                self._database_origins_path_lookup[metadata.origin] = idb_folder
+
+    def iter_origins(self) -> collections.abc.Iterable[str]:
+        yield from self._database_origins_path_lookup.keys()
+
+    def get_idb(self, origin) -> MozillaIndexedDb:
+        if origin not in self._database_origins_path_lookup:
+            raise KeyError(origin)
+        if origin not in self._databases:
+            idb = MozillaIndexedDb(self._database_origins_path_lookup[origin])
+            self._databases[origin] = idb
+            return idb
+        else:
+            return self._databases[origin]
+
+    @property
+    def path(self):
+        return self._path
+
 
 
 # if __name__ == '__main__':

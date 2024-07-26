@@ -114,6 +114,7 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
         self._places: typing.Optional[ccl_moz_places.MozillaPlacesDatabase] = None
         self._localstorage: typing.Optional[ccl_moz_localstorage.LocalStoreDb] = None
         self._sessionstorage: typing.Optional[ccl_moz_sessionstorage.SessionStorage] = None
+        self._indexeddb: typing.Optional[ccl_moz_indexeddb.MozillaIndexedDbBag] = None
 
     def close(self):
         if self._places is not None:
@@ -135,6 +136,14 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
     def _lazy_load_session_storage(self):
         if self._sessionstorage is None:
             self._sessionstorage = ccl_moz_sessionstorage.SessionStorage(self._profile_folder)
+
+    def _lazy_load_indexeddb(self):
+        if self._indexeddb is None:
+            storage_default_path = (
+                    self._profile_folder /
+                    MozillaProfileFolder._STORAGE_FOLDER_NAME /
+                    MozillaProfileFolder._DEFAULT_FOLDER_NAME)
+            self._indexeddb = ccl_moz_indexeddb.MozillaIndexedDbBag(storage_default_path)
 
     def iter_local_storage_hosts(self) -> col_abc.Iterable[str]:
         """
@@ -199,32 +208,31 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
         Iterates the hosts present in the Indexed DB folder. These values are what should be used to load the databases
         directly.
         """
-        raise NotImplementedError()
+        self._lazy_load_indexeddb()
+        yield from self._indexeddb.iter_origins()
 
-    def get_indexeddb(self, host: str):
+    def get_indexeddb(self, host: str) -> ccl_moz_indexeddb.MozillaIndexedDb:
         """
         Returns the database with the host provided. Should be one of the values returned by
         :func:`~iter_indexeddb_hosts`. The database will be opened on-demand if it hasn't previously been opened.
 
         :param host: the host to get
         """
-        # TODO typehint return type once it's also abstracted
-        raise NotImplementedError()
+        self._lazy_load_indexeddb()
+        return self._indexeddb.get_idb(host)
 
     def iter_indexeddb_records(
             self, host_id: typing.Optional[KeySearch], database_name: typing.Optional[KeySearch] = None,
             object_store_name: typing.Optional[KeySearch] = None, *,
-            raise_on_no_result=False, include_deletions=False,
-            bad_deserializer_data_handler=None):
+            raise_on_no_result=False, include_deletions=False):
         """
         Iterates indexeddb records in this profile.
 
-        :param host_id: the host for the records, relates to the host-named folder in the IndexedDB folder. The
-        possible values for this profile are returned by :func:`~iter_indexeddb_hosts`. This can be one of:
-        a single string; a collection of strings; a regex pattern; a function that takes a string (each host) and
-        returns a bool; or None in which case all hosts are considered. Be cautious with supplying a parameter
-        which will lead to unnecessary databases being opened as this has a set-up time for the first time it
-        is opened.
+        :param host_id: the host for the records, The possible values for this profile are returned by
+        :func:`~iter_indexeddb_hosts`. This can be one of: a single string; a collection of strings;
+        a regex pattern; a function that takes a string (each host) and returns a bool; or None in which
+        case all hosts are considered. Be cautious with supplying a parameter which will lead to unnecessary
+        databases being opened as this has a set-up time for the first time it is opened.
         :param database_name: the database name for the records. This can be one of: a single string; a collection
         of strings; a regex pattern; a function that takes a string (each host) and returns a bool; or None (the
         default) in which case all hosts are considered.
@@ -232,16 +240,26 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
         a collection of strings; a regex pattern; a function that takes a string (each host) and returns a bool;
         or None (the default) in which case all hosts are considered.
         :param raise_on_no_result: if True, if no matching storage keys are found, raise a KeyError
-        :param include_deletions: if True, records related to deletions will be included (these will have None as
-        values).
-        :param bad_deserializer_data_handler: a callback function which will be executed by the underlying
-        indexeddb reader if invalid data is encountered during reading a record, rather than raising an exception.
-        The function should take two arguments: an IdbKey object (which is the key of the bad record) and a bytes
-        object (which is the raw data). The return value of the callback is ignored by the calling code. If this is
-        None (the default) then any bad data will cause an exception to be raised.
+        :param include_deletions: no effect in Mozilla
         """
-        # TODO typehint bad_deserializer_data_handler and return type once it's also abstracted
-        raise NotImplementedError()
+        self._lazy_load_indexeddb()
+
+        yielded = False
+        matched_hosts = [h for h in self._indexeddb.iter_origins() if host_id is None or is_keysearch_hit(host_id, h)]
+        for host in matched_hosts:
+            idb = self._indexeddb.get_idb(host)
+            matched_databases = [d for d in idb.databases
+                                 if database_name is None or is_keysearch_hit(database_name, d.name)]
+            for db in matched_databases:
+                matched_objstores = [o for o in db.object_stores
+                                     if object_store_name is None or is_keysearch_hit(object_store_name, o.name)]
+                for obj_store in matched_objstores:
+                    for rec in db.iter_records_for_object_store(obj_store):
+                        yielded = True
+                        yield rec
+
+        if raise_on_no_result and not yielded:
+            raise KeyError((host_id, database_name, object_store_name))
 
     def iterate_history_records(
             self, url: typing.Optional[KeySearch] = None, *,
@@ -322,12 +340,14 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
     @property
     def local_storage(self):
         """The local storage object for this browser profile"""
-        raise NotImplementedError()
+        self._lazy_load_local_storage()
+        return self._localstorage
 
     @property
     def session_storage(self):
         """The session storage object for this browser profile"""
-        raise NotImplementedError()
+        self._lazy_load_local_storage()
+        return self._sessionstorage
 
     @property
     def cache(self):
