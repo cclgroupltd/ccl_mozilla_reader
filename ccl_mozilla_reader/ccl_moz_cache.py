@@ -445,10 +445,14 @@ class CacheFile:
             self._header = types.MappingProxyType({})
 
     @property
-    def header_attributes(self):
-        yield from self._header.keys()
+    def header_attributes(self) -> col_abc.Iterable[tuple[str, str]]:
+        #yield from self._header.keys()
+        yield from self._header.items()
 
-    def get_header_attribute(self, attribute):
+    def has_header_attribute(self, attribute: str):
+        return attribute.lower() in self._header
+
+    def get_header_attribute(self, attribute: str):
         return self._header.get(attribute.lower())
 
     @classmethod
@@ -533,14 +537,34 @@ class MozillaCache:
         for file, metadata in self._precached_metadata.values():
             yield metadata
 
-    def _iter_cache_all(self):
+    @staticmethod
+    def _check_attributes(cache_file: CacheFile, **kwargs):
+        for att_name, test_value in kwargs.items():
+            att_name = att_name.replace("_", "-").lower()
+            has_att = cache_file.has_header_attribute(att_name)
+
+            if isinstance(test_value, bool):
+                return not (test_value ^ has_att)
+
+            if not has_att:
+                return False
+
+            if not is_keysearch_hit(test_value, cache_file.get_header_attribute(att_name)):
+                return False
+
+        return True
+
+    def _iter_cache_all(self, **kwargs):
         for file in (self._cache_folder / MozillaCache._ENTRIES_FOLDER_NAME).iterdir():
             if not file.is_file():
                 continue
             cache_file = CacheFile.from_file(file)
+            if kwargs and not self._check_attributes(cache_file, **kwargs):
+                continue
+
             yield cache_file
 
-    def _iter_cache_filtered(self, search_url: KeySearch):
+    def _iter_cache_filtered(self, search_url: KeySearch, **kwargs):
         if self._precached_metadata is None:
             self._precache_metadata()
             self._make_url_key_lookup()
@@ -549,12 +573,16 @@ class MozillaCache:
             for key in self._url_key_lookup.get(search_url, []):
                 file, meta = self._precached_metadata[key]
                 cache_file = CacheFile.from_file(file)
+                if kwargs and not self._check_attributes(cache_file, **kwargs):
+                    continue
                 yield cache_file
         elif isinstance(search_url, col_abc.Collection):
             for url in search_url:
                 for key in self._url_key_lookup.get(url, []):
                     file, meta = self._precached_metadata[key]
                     cache_file = CacheFile.from_file(file)
+                    if kwargs and not self._check_attributes(cache_file, **kwargs):
+                        continue
                     yield cache_file
         elif isinstance(search_url, re.Pattern):
             for url, keys in self._url_key_lookup.items():
@@ -562,6 +590,8 @@ class MozillaCache:
                     for key in keys:
                         file, meta = self._precached_metadata[key]
                         cache_file = CacheFile.from_file(file)
+                        if kwargs and not self._check_attributes(cache_file, **kwargs):
+                            continue
                         yield cache_file
         elif isinstance(search_url, col_abc.Callable):
             for url, keys in self._url_key_lookup.items():
@@ -569,14 +599,30 @@ class MozillaCache:
                     for key in keys:
                         file, meta = self._precached_metadata[key]
                         cache_file = CacheFile.from_file(file)
+                        if kwargs and not self._check_attributes(cache_file, **kwargs):
+                            continue
                         yield cache_file
         else:
             raise TypeError(f"Unexpected type: {type(search_url)} (expects: {KeySearch})")
 
-    def iter_cache(self, *, url: typing.Optional[KeySearch]=None):
+    def iter_cache(self, *, url: typing.Optional[KeySearch]=None, **kwargs):
+        """
+        Iterates cache records for this cache.
+
+        :param url: a URL to search for. This can be one of: a single string; a collection of strings;
+        a regex pattern; a function that takes a string (each host) and returns a bool; or None (the
+        default) in which case all records are considered.
+        :param kwargs: further keyword arguments are used to search based upon header fields. The
+        keyword should be the header field name, with underscores replacing hyphens (e.g.,
+        content-encoding, becomes content_encoding). The value should be one of: a Boolean (in which
+        case only records with this field present will be included if True, and vice versa); a single
+        string; a collection of strings; a regex pattern; a function that takes a string (the value)
+        and returns a bool.
+        """
+
         if url is None:
-            yield from self._iter_cache_all()
+            yield from self._iter_cache_all(**kwargs)
         else:
-            yield from self._iter_cache_filtered(url)
+            yield from self._iter_cache_filtered(url, **kwargs)
 
 
