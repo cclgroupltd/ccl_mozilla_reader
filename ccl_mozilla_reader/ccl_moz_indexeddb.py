@@ -64,7 +64,7 @@ class MozillaIndexedDbRecord:
 
     def open_external_data(
             self,
-            file_or_blob: typing.Optional[ccl_moz_structured_clone_reader.File, ccl_moz_structured_clone_reader.Blob]):
+            file_or_blob: typing.Optional[typing.Union[ccl_moz_structured_clone_reader.File, ccl_moz_structured_clone_reader.Blob]]):
         if file_or_blob.index >= len(self.file_ids):
             raise IndexError(f"index for the file or blob is too large for this record "
                              f"(index: {file_or_blob.index}); file ids length: {len(self.file_ids)}")
