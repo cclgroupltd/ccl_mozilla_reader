@@ -96,6 +96,8 @@ class CacheResult:
 
 class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
     _PLACES_DB_NAME = "places.sqlite"
+    _STORAGE_FOLDER_NAME = "storage"
+    _DEFAULT_FOLDER_NAME = "default"
 
     def __init__(self, main_profile_path: pathlib.Path, cache_path: pathlib.Path):
         if not main_profile_path.is_dir():
@@ -110,6 +112,8 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
         # Cache operates lazily so no problem setting it up now
         self._cache: ccl_moz_cache.MozillaCache = ccl_moz_cache.MozillaCache(cache_path)
         self._places: typing.Optional[ccl_moz_places.MozillaPlacesDatabase] = None
+        self._localstorage: typing.Optional[ccl_moz_localstorage.LocalStoreDb] = None
+        self._sessionstorage: typing.Optional[ccl_moz_sessionstorage.SessionStorage] = None
 
     def close(self):
         if self._places is not None:
@@ -120,15 +124,30 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
             self._places = ccl_moz_places.MozillaPlacesDatabase(
                 self._profile_folder / MozillaProfileFolder._PLACES_DB_NAME)
 
+    def _lazy_load_local_storage(self):
+        if self._localstorage is None:
+            ls_path = (
+                    self._profile_folder /
+                    MozillaProfileFolder._STORAGE_FOLDER_NAME /
+                    MozillaProfileFolder._DEFAULT_FOLDER_NAME)
+            self._localstorage = ccl_moz_localstorage.LocalStoreDb(ls_path)
+
+    def _lazy_load_session_storage(self):
+        if self._sessionstorage is None:
+            self._sessionstorage = ccl_moz_sessionstorage.SessionStorage(self._profile_folder)
+
     def iter_local_storage_hosts(self) -> col_abc.Iterable[str]:
         """
         Iterates the hosts in this profile's local storage
         """
-        raise NotImplementedError()
+        self._lazy_load_local_storage()
+        yield from self._localstorage.iter_storage_keys()
 
     def iter_local_storage(
-            self, storage_key: typing.Optional[KeySearch] = None, script_key: typing.Optional[KeySearch] = None, *,
-            include_deletions=False, raise_on_no_result=False):
+            self, storage_key: typing.Optional[KeySearch] = None,
+            script_key: typing.Optional[KeySearch] = None, *,
+            include_deletions=False,
+            raise_on_no_result=False) -> col_abc.Iterable[ccl_moz_localstorage.LocalStorageRecord]:
         """
         Iterates this profile's local storage records
 
@@ -136,23 +155,28 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
         a collection of strings; a regex pattern; a function that takes a string and returns a bool.
         :param script_key: script defined key for the records. This can be one of: a single string;
         a collection of strings; a regex pattern; a function that takes a string and returns a bool.
-        :param include_deletions: if True, records related to deletions will be included
+        :param include_deletions: Has no effect in Mozilla currently
         :param raise_on_no_result: if True (the default) if no matching storage keys are found, raise a KeyError
         (these will have None as values).
         :return: TODO
         """
-        # TODO typehint return type once it's also abstracted
-        raise NotImplementedError()
+        self._lazy_load_local_storage()
+        yield from self._localstorage.iter_records(
+            storage_key=storage_key, script_key=script_key, raise_on_no_result=raise_on_no_result)
 
     def iter_session_storage_hosts(self) -> col_abc.Iterable[str]:
         """
         Iterates this profile's session storage hosts
         """
-        raise NotImplementedError()
+        self._lazy_load_session_storage()
+        yield from self._sessionstorage.iter_hosts()
 
     def iter_session_storage(
-            self, host: typing.Optional[KeySearch] = None, key: typing.Optional[KeySearch] = None, *,
-            include_deletions=False, raise_on_no_result=False):
+            self,
+            host: typing.Optional[KeySearch] = None,
+            key: typing.Optional[KeySearch] = None, *,
+            include_deletions=False,
+            raise_on_no_result=False) -> col_abc.Iterable[ccl_moz_sessionstorage.SessionStoreRecord]:
         """
         Iterates this profile's session storage records
 
@@ -162,14 +186,13 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
         :param key: script defined key for the records. This can be one of: a single string;
         a collection of strings; a regex pattern; a function that takes a string and returns a bool; or
         None (the default) in which case all keys are considered.
-        :param include_deletions: if True, records related to deletions will be included (these will have None as
-        values).
+        :param include_deletions: has no effect in Mozilla
         :param raise_on_no_result: if True, if no matching storage keys are found, raise a KeyError
 
-        :return: iterable of LocalStorageRecords
+        :return: iterable of SessionStoreRecords
         """
-        # TODO typehint return type once it's also abstracted
-        raise NotImplementedError()
+        self._lazy_load_session_storage()
+        yield from self._sessionstorage.iter_records(host=host, key=key, raise_on_no_results=raise_on_no_result)
 
     def iter_indexeddb_hosts(self) -> col_abc.Iterable[str]:
         """
