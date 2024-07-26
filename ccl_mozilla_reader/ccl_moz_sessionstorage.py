@@ -43,6 +43,10 @@ class SessionStoreRecord:
     is_closed_tab: bool
     origin_file: pathlib.Path
 
+    @property
+    def record_location(self) -> str:
+        return f"{self.origin_file.name}"
+
 
 class SessionStorage:
     """

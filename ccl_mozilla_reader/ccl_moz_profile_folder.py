@@ -360,6 +360,10 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
         self._lazy_load_places()
         return self._places
 
+    @property
+    def browser_type(self) -> str:
+        return "Mozilla"
+
     def __enter__(self) -> "MozillaProfileFolder":
         return self
 

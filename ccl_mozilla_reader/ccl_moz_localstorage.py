@@ -64,6 +64,11 @@ class LocalStorageRecord:
     conversion_type: ConversionType
     compression_type: CompressionType
 
+    @property
+    def record_location(self) -> str:
+        path = pathlib.Path(*self.database_path.parts[-3: 0])
+        return f"DB: {path}; Rowid: {self.sqlite_rowid}"
+
 
 class LocalStoreDb:
     """

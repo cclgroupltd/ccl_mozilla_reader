@@ -110,6 +110,10 @@ class MozillaHistoryRecord:
         """
         return self._owner.get_children_of(self)
 
+    @property
+    def record_location(self) -> str:
+        return f"SQLite Rowid: {self.rec_id}"
+
 
 @dataclasses.dataclass(frozen=True)
 class MozillaDownload(MozillaHistoryRecord):
