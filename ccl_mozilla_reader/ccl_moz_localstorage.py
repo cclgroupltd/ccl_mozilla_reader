@@ -31,7 +31,7 @@ import types
 import collections.abc as col_abc
 import typing
 
-from .storage_formats import ccl_simplesnappy
+import ccl_simplesnappy
 from .storage_common import MetadataV2
 from .common import KeySearch, is_keysearch_hit
 

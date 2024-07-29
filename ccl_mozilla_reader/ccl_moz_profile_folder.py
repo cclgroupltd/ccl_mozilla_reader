@@ -16,6 +16,11 @@ from . import ccl_moz_sessionstorage
 from .common import KeySearch, is_keysearch_hit
 
 
+__version__ = "0.1"
+__description__ = "Module to consolidate and simplify access to data stores in the Mozilla profile folder"
+__contact__ = "Alex Caithness"
+
+
 class CacheResultMetadataProxy:
     # used to align with what goes on in the Chromium module
     def __init__(self, cache_file: ccl_moz_cache.CacheFile):

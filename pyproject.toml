@@ -9,7 +9,7 @@ packages = [
 
 [project]
 name = "ccl_mozilla_reader"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
   { name="Alex Caithness", email="research@cclsolutionsgroup.com" },
 ]
@@ -25,6 +25,7 @@ classifiers = [
 keywords = ["digital forensics", "dfir", "mozilla", "firefox", "browser"]
 dependencies = [
     "lz4==4.3.3",
+    "ccl_simplesnappy @ git+https://github.com/cclgroupltd/ccl_simplesnappy.git"
 ]
 
 [project.urls]

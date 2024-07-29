@@ -1,1 +1,2 @@
 lz4==4.3.3
+ccl_simplesnappy @ git+https://github.com/cclgroupltd/ccl_simplesnappy.git

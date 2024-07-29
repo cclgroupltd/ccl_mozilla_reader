@@ -22,7 +22,6 @@ SOFTWARE.
 import collections.abc
 import dataclasses
 import io
-import sys
 import pathlib
 import sqlite3
 import typing
@@ -32,7 +31,7 @@ import os
 from . import storage_common
 from . import ccl_moz_indexeddb_key
 from .serialization_formats import ccl_moz_structured_clone_reader
-from .storage_formats import ccl_simplesnappy
+import ccl_simplesnappy
 
 __version__ = "0.1"
 __description__ = "Library for reading Mozilla Firefox IndexedDB"
