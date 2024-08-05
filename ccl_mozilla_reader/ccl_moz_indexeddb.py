@@ -90,6 +90,13 @@ class MozillaIndexedDbRecord:
     def obj_store_id(self) -> int:
         return self.object_store_meta.id_number
 
+    @property
+    def record_location(self) -> str:
+        if self.external_value_path is not None:
+            return f"External file: {self.external_value_path}"
+        else:
+            return f"SQLite Primary Key: {self.key.raw_key.hex()}"
+
 
 class MozillaIndexedDbDatabase:
     METADATA_QUERY = """

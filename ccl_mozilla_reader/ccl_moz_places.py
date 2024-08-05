@@ -123,6 +123,14 @@ class MozillaDownload(MozillaHistoryRecord):
     file_size: typing.Optional[int]
     download_state: DownloadState
 
+    @property
+    def start_time(self):
+        return self.visit_time
+
+    @property
+    def target_path(self):
+        return self.downloaded_location
+
 
 class MozillaPlacesDatabase:
     _HISTORY_QUERY = """

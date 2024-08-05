@@ -98,6 +98,10 @@ class CacheResult:
 
         return self._data_processed
 
+    @property
+    def was_decompressed(self) -> bool:
+        return self._was_compressed
+
 
 class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
     _PLACES_DB_NAME = "places.sqlite"
@@ -325,7 +329,7 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
         This can be one of: a single string; a collection of strings; a regex pattern; a function that takes
         a string (each host) and returns a bool; or None (the default) in which case all records are considered.
         """
-        # TODO typehint return type once it's also abstracted
+
         self._lazy_load_places()
         for download in self._places.iter_downloads():
             if download_url is not None and not is_keysearch_hit(download_url, download.url):
