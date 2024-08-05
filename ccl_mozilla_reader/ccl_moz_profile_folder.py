@@ -16,7 +16,7 @@ from . import ccl_moz_sessionstorage
 from .common import KeySearch, is_keysearch_hit
 
 
-__version__ = "0.1"
+__version__ = "0.1.1"
 __description__ = "Module to consolidate and simplify access to data stores in the Mozilla profile folder"
 __contact__ = "Alex Caithness"
 
@@ -39,7 +39,7 @@ class CacheResultMetadataProxy:
         #return declaration in self._declarations
 
     def get_attribute(self, attribute: str) -> list[str]:
-        return self._cache_file.get_header_attribute(attribute.lower()) or []
+        return [self._cache_file.get_header_attribute(attribute.lower())] or []
 
     def __getattr__(self, item):
         return getattr(self._cache_file.metadata, item)
