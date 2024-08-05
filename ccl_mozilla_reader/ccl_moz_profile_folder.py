@@ -16,7 +16,7 @@ from . import ccl_moz_sessionstorage
 from .common import KeySearch, is_keysearch_hit
 
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __description__ = "Module to consolidate and simplify access to data stores in the Mozilla profile folder"
 __contact__ = "Alex Caithness"
 
@@ -62,7 +62,10 @@ class CacheResult:
             return
 
         content_encoding = self._cache_file.get_header_attribute("content-encoding")
-        if content_encoding.strip() == "gzip":
+        if content_encoding is None:
+            self._data_processed = self._cache_file.data
+            self._was_compressed = False
+        elif content_encoding.strip() == "gzip":
             self._data_processed = gzip.decompress(self._cache_file.data)
             self._was_compressed = True
         elif content_encoding.strip() == "br":
