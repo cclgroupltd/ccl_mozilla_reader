@@ -5,11 +5,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = [
     "ccl_mozilla_reader",
+    "ccl_mozilla_reader.serialization_formats",
+    "ccl_mozilla_reader.storage_formats",
 ]
 
 [project]
 name = "ccl_mozilla_reader"
-version = "0.0.3"
+version = "0.0.5"
 authors = [
   { name="Alex Caithness", email="research@cclsolutionsgroup.com" },
 ]
