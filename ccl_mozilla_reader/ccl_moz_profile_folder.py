@@ -16,7 +16,7 @@ from . import ccl_moz_sessionstorage
 from .common import KeySearch, is_keysearch_hit
 
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __description__ = "Module to consolidate and simplify access to data stores in the Mozilla profile folder"
 __contact__ = "Alex Caithness"
 
@@ -87,12 +87,12 @@ class CacheResult:
         return self._metadata_proxy
 
     @property
-    def data_location(self):  # do we need to wrap this up like the CacheFileLocation in the Chromium version?
-        return self._cache_file.path
+    def data_location(self):
+        return f"{self._cache_file.path.name} @ 0"
 
     @property
     def metadata_location(self):
-        return self._cache_file.path
+        return f"{self._cache_file.path.name} @ {self._cache_file.metadata.offset}"
 
     @property
     def data(self) -> bytes:
