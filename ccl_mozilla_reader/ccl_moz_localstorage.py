@@ -36,7 +36,7 @@ from .storage_common import MetadataV2
 from .common import KeySearch, is_keysearch_hit
 
 
-__version__ = "0.1"
+__version__ = "0.1.1"
 __description__ = "Library for reading Mozilla Firefox local storage"
 __contact__ = "Alex Caithness"
 
@@ -66,7 +66,7 @@ class LocalStorageRecord:
 
     @property
     def record_location(self) -> str:
-        path = pathlib.Path(*self.database_path.parts[-3: 0])
+        path = pathlib.Path(*self.database_path.parts[-3:])
         return f"DB: {path}; Rowid: {self.sqlite_rowid}"
 
 
