@@ -124,7 +124,7 @@ class MozillaIndexedDbDatabase:
         self._db_path = db_path
         if not db_path.is_file():
             raise FileNotFoundError(db_path)
-        self._db = sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True)
+        self._db = sqlite3.connect(db_path.absolute().as_uri() + "?mode=ro", uri=True)
         self._db.row_factory = sqlite3.Row
         #self._external_data_callback = external_data_callback
         self._owner = owner

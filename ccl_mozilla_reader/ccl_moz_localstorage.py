@@ -126,7 +126,7 @@ class LocalStoreDb:
 
         if self._databases[storage_key] is None:
             self._databases[storage_key] = sqlite3.connect(
-                self._host_lookup[storage_key].as_uri() + "?mode=ro", uri=True)
+                self._host_lookup[storage_key].absolute().as_uri() + "?mode=ro", uri=True)
             self._databases[storage_key].row_factory = sqlite3.Row
 
     def iter_storage_keys(self) -> col_abc.Iterable[str]:
