@@ -30,7 +30,7 @@ import sys
 import types
 import typing
 
-__version__ = "0.1"
+__version__ = "0.1.1"
 __description__ = "Library for reading Mozilla Firefox Structured Clone data (used to store objects in IndexedDB)"
 __contact__ = "Alex Caithness"
 
@@ -599,7 +599,7 @@ class StructuredCloneReader:
         size = self._read_ulong()
         self._align()  # should be redundant really
         mime_type = self.read_structuredclonereader_string()
-
+        self._align()
         if pair.tag == StructuredDataType.DOM_FILE:
             last_modified = self._read_double()
             last_modified = datetime.datetime(

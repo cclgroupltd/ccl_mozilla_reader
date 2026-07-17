@@ -31,12 +31,14 @@ import os
 from . import storage_common
 from . import ccl_moz_indexeddb_key
 from .serialization_formats import ccl_moz_structured_clone_reader
+from .profile_folder_protocols import IndexedDbRecordProtocol
 import ccl_simplesnappy
 
-__version__ = "0.1"
+__version__ = "0.2"
 __description__ = "Library for reading Mozilla Firefox IndexedDB"
 __contact__ = "Alex Caithness"
 
+from .structures import ArtifactLocation
 
 UNIX_EPOCH = datetime.datetime(1970, 1, 1)
 
@@ -54,7 +56,7 @@ class ObjectStoreMetadata:
 
 
 @dataclasses.dataclass(frozen=True)
-class MozillaIndexedDbRecord:
+class MozillaIndexedDbRecord(IndexedDbRecordProtocol):
     owner: "MozillaIndexedDbDatabase"
     object_store_meta: ObjectStoreMetadata
     key: ccl_moz_indexeddb_key.MozillaIdbKey
@@ -91,11 +93,11 @@ class MozillaIndexedDbRecord:
         return self.object_store_meta.id_number
 
     @property
-    def record_location(self) -> str:
+    def record_location(self) -> ArtifactLocation:
         if self.external_value_path is not None:
-            return f"External file: {self.external_value_path}"
+            return ArtifactLocation(self.external_value_path, None,  f"External file: {self.external_value_path}")
         else:
-            return f"SQLite Primary Key: {self.key.raw_key.hex()}"
+            return ArtifactLocation(str(self.origin_file), None, f"SQLite Primary Key: {self.key.raw_key.hex()}")
 
 
 class MozillaIndexedDbDatabase:

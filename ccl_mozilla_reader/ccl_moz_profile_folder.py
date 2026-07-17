@@ -12,16 +12,19 @@ from . import ccl_moz_cache
 from . import ccl_moz_indexeddb
 from . import ccl_moz_localstorage
 from . import ccl_moz_sessionstorage
+from .profile_folder_protocols import BrowserProfileProtocol, CacheRecordProtocol, CacheMetadataProtocol
 
 from .common import KeySearch, is_keysearch_hit
 
 
-__version__ = "0.1.3"
+__version__ = "0.2"
 __description__ = "Module to consolidate and simplify access to data stores in the Mozilla profile folder"
 __contact__ = "Alex Caithness"
 
+from .structures import ArtifactLocation
 
-class CacheResultMetadataProxy:
+
+class CacheResultMetadataProxy(CacheRecordProtocol):
     # used to align with what goes on in the Chromium module
     def __init__(self, cache_file: ccl_moz_cache.CacheFile):
         self._cache_file = cache_file
@@ -45,7 +48,7 @@ class CacheResultMetadataProxy:
         return getattr(self._cache_file.metadata, item)
 
 
-class CacheResult:
+class CacheResult(CacheRecordProtocol):
     # this Wrapper around a CacheFile object is designed to ducktype with the version in the Chromium module
     def __init__(self, cache_file: ccl_moz_cache.CacheFile, *, decompress_data=True):
         self._cache_file = cache_file
@@ -66,14 +69,26 @@ class CacheResult:
             self._data_processed = self._cache_file.data
             self._was_compressed = False
         elif content_encoding.strip() == "gzip":
-            self._data_processed = gzip.decompress(self._cache_file.data)
-            self._was_compressed = True
+            try:
+                self._data_processed = gzip.decompress(self._cache_file.data)
+                self._was_compressed = True
+            except gzip.BadGzipFile:
+                self._data_processed = self._cache_file.data
+                self._was_compressed = False
         elif content_encoding.strip() == "br":
-            self._data_processed = brotli.decompress(self._cache_file.data)
-            self._was_compressed = True
+            try:
+                self._data_processed = brotli.decompress(self._cache_file.data)
+                self._was_compressed = True
+            except brotli.error:
+                self._data_processed = self._cache_file.data
+                self._was_compressed = False
         elif content_encoding.strip() == "deflate":
-            self._data_processed = zlib.decompress(self._cache_file.data, -zlib.MAX_WBITS)  # suppress trying to read a header
-            self._was_compressed = True
+            try:
+                self._data_processed = zlib.decompress(self._cache_file.data, -zlib.MAX_WBITS)  # suppress trying to read a header
+                self._was_compressed = True
+            except zlib.error:
+                self._data_processed = self._cache_file.data
+                self._was_compressed = False
         else:
             self._data_processed = self._cache_file.data
             self._was_compressed = False
@@ -87,12 +102,15 @@ class CacheResult:
         return self._metadata_proxy
 
     @property
-    def data_location(self):
-        return f"{self._cache_file.path.name} @ 0"
+    def data_location(self) -> ArtifactLocation:
+        return ArtifactLocation(str(self._cache_file.path), 0, f"{self._cache_file.path.name} @ 0")
 
     @property
-    def metadata_location(self):
-        return f"{self._cache_file.path.name} @ {self._cache_file.metadata.offset}"
+    def metadata_location(self) -> ArtifactLocation:
+        return ArtifactLocation(
+            str(self._cache_file.path),
+            self._cache_file.metadata.offset,
+            f"{self._cache_file.path.name} @ {self._cache_file.metadata.offset}")
 
     @property
     def data(self) -> bytes:
@@ -106,7 +124,7 @@ class CacheResult:
         return self._was_compressed
 
 
-class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
+class MozillaProfileFolder(BrowserProfileProtocol):
     _PLACES_DB_NAME = "places.sqlite"
     _STORAGE_FOLDER_NAME = "storage"
     _DEFAULT_FOLDER_NAME = "default"
@@ -236,7 +254,13 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
     def iter_indexeddb_records(
             self, host_id: typing.Optional[KeySearch], database_name: typing.Optional[KeySearch] = None,
             object_store_name: typing.Optional[KeySearch] = None, *,
-            raise_on_no_result=False, include_deletions=False):
+            raise_on_no_result=False, include_deletions=False,
+            bad_deserializer_data_handler=None) -> col_abc.Iterable[ccl_moz_indexeddb.MozillaIndexedDbRecord]:
+
+        """self, host_id: typing.Optional[KeySearch], database_name: typing.Optional[KeySearch] = None,
+            object_store_name: typing.Optional[KeySearch] = None, *,
+            raise_on_no_result=False, include_deletions=False,
+            bad_deserializer_data_handler=None) -> col_abc.Iterable[IndexedDbRecordProtocol]:"""
         """
         Iterates indexeddb records in this profile.
 

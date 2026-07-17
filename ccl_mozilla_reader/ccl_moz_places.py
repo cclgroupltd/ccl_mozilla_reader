@@ -33,10 +33,13 @@ import json
 import collections.abc as col_abc
 
 from .common import KeySearch
+from .profile_folder_protocols import HistoryRecordProtocol
 
-__version__ = "0.1"
+__version__ = "0.2"
 __description__ = "Library for reading Mozilla Firefox history and downloads from the places database"
 __contact__ = "Alex Caithness"
+
+from .structures import ArtifactLocation
 
 EPOCH = datetime.datetime(1970, 1, 1)
 
@@ -79,8 +82,9 @@ class DownloadState(enum.IntEnum):
 
 
 @dataclasses.dataclass(frozen=True)
-class MozillaHistoryRecord:
+class MozillaHistoryRecord(HistoryRecordProtocol):
     _owner: "MozillaPlacesDatabase" = dataclasses.field(repr=False)
+    db_path: pathlib.Path
     rec_id: int
     url: str
     title: str
@@ -111,8 +115,8 @@ class MozillaHistoryRecord:
         return self._owner.get_children_of(self)
 
     @property
-    def record_location(self) -> str:
-        return f"SQLite Rowid: {self.rec_id}"
+    def record_location(self) -> ArtifactLocation:
+        return ArtifactLocation(str(self.db_path), None, f"SQLite Rowid: {self.rec_id}")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -180,10 +184,12 @@ class MozillaPlacesDatabase:
         self._conn = sqlite3.connect(places_db_path.absolute().as_uri() + "?mode=ro", uri=True)
         self._conn.row_factory = sqlite3.Row
         self._conn.create_function("regexp", 2, lambda y, x: 1 if re.search(y, x) is not None else 0)
+        self._db_path = places_db_path
 
     def _row_to_record(self, row: sqlite3.Row) -> MozillaHistoryRecord:
         return MozillaHistoryRecord(
             self,
+            self._db_path,
             row["id"],
             row["url"],
             row["title"],

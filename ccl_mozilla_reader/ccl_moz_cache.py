@@ -36,9 +36,10 @@ import email
 import collections.abc as col_abc
 
 from .common import KeySearch, is_keysearch_hit
+from .profile_folder_protocols import CacheKeyProtocol
 
 
-__version__ = "0.2"
+__version__ = "0.3"
 __description__ = "Library for reading Mozilla Firefox Cache (v2 Entries version)"
 __contact__ = "Alex Caithness"
 
@@ -162,7 +163,7 @@ class CacheEntryContentType(enum.IntEnum):
     WASM = 6
 
 
-class CacheKey:
+class CacheKey(CacheKeyProtocol):
     # netwerk/cache2/CacheFileUtils.cpp
     def __init__(self, raw_key: str):
         self._raw_key = raw_key
@@ -188,11 +189,11 @@ class CacheKey:
         return self._raw_key.__hash__()
 
     @property
-    def url(self):
+    def url(self) -> str:
         return self._url
 
     @property
-    def raw_key(self):
+    def raw_key(self) -> str:
         return self._raw_key
 
     @staticmethod
@@ -402,10 +403,10 @@ class CacheFileMetadata:
         elements_raw = elements_raw[0:-4]
         if elements_raw.endswith(b"\x00"):
             elements_raw = elements_raw[0:-1]  # check the final delimiting 0x00 is there and remove it
-        else:
+        elif elements_raw:  # could be empty
             raise ValueError("Invalid metadata format (missing final delimiting 0x00)")
 
-        elements_raw_split = elements_raw.split(b"\x00")
+        elements_raw_split = elements_raw.split(b"\x00") if elements_raw else []
         if len(elements_raw_split) % 2 != 0:
             raise ValueError("Invalid metadata format (odd number of elements)")
 

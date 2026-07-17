@@ -25,7 +25,9 @@ import io
 import struct
 import typing
 
-__version__ = "0.1"
+from .profile_folder_protocols import IdbKeyProtocol
+
+__version__ = "0.2"
 __description__ = "Library for reading/parsing IndexedDB Keys from Mozilla Firefox"
 __contact__ = "Alex Caithness"
 
@@ -149,7 +151,7 @@ class _IdbKeyReader:
         return self._read_token(token)
 
 
-class MozillaIdbKey:
+class MozillaIdbKey(IdbKeyProtocol):
     def __init__(self, value: typing.Union[str, bytes, float, datetime.datetime, tuple], raw_key: bytes):
         self._value = value
         self._raw_value = raw_key
@@ -180,6 +182,6 @@ class MozillaIdbKey:
         return self._value
 
     @property
-    def raw_key(self):
+    def raw_key(self) -> bytes:
         return self._raw_value
 
