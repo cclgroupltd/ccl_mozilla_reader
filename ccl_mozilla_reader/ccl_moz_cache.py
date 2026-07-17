@@ -403,10 +403,10 @@ class CacheFileMetadata:
         elements_raw = elements_raw[0:-4]
         if elements_raw.endswith(b"\x00"):
             elements_raw = elements_raw[0:-1]  # check the final delimiting 0x00 is there and remove it
-        else:
+        elif elements_raw:  # could be empty
             raise ValueError("Invalid metadata format (missing final delimiting 0x00)")
 
-        elements_raw_split = elements_raw.split(b"\x00")
+        elements_raw_split = elements_raw.split(b"\x00") if elements_raw else []
         if len(elements_raw_split) % 2 != 0:
             raise ValueError("Invalid metadata format (odd number of elements)")
 
