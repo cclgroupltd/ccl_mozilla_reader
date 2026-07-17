@@ -69,14 +69,26 @@ class CacheResult(CacheRecordProtocol):
             self._data_processed = self._cache_file.data
             self._was_compressed = False
         elif content_encoding.strip() == "gzip":
-            self._data_processed = gzip.decompress(self._cache_file.data)
-            self._was_compressed = True
+            try:
+                self._data_processed = gzip.decompress(self._cache_file.data)
+                self._was_compressed = True
+            except gzip.BadGzipFile:
+                self._data_processed = self._cache_file.data
+                self._was_compressed = False
         elif content_encoding.strip() == "br":
-            self._data_processed = brotli.decompress(self._cache_file.data)
-            self._was_compressed = True
+            try:
+                self._data_processed = brotli.decompress(self._cache_file.data)
+                self._was_compressed = True
+            except brotli.error:
+                self._data_processed = self._cache_file.data
+                self._was_compressed = False
         elif content_encoding.strip() == "deflate":
-            self._data_processed = zlib.decompress(self._cache_file.data, -zlib.MAX_WBITS)  # suppress trying to read a header
-            self._was_compressed = True
+            try:
+                self._data_processed = zlib.decompress(self._cache_file.data, -zlib.MAX_WBITS)  # suppress trying to read a header
+                self._was_compressed = True
+            except zlib.error:
+                self._data_processed = self._cache_file.data
+                self._was_compressed = False
         else:
             self._data_processed = self._cache_file.data
             self._was_compressed = False
