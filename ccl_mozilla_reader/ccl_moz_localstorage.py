@@ -34,11 +34,14 @@ import typing
 import ccl_simplesnappy
 from .storage_common import MetadataV2
 from .common import KeySearch, is_keysearch_hit
+from .profile_folder_protocols import LocalStorageRecordProtocol
 
 
 __version__ = "0.1.1"
 __description__ = "Library for reading Mozilla Firefox local storage"
 __contact__ = "Alex Caithness"
+
+from .structures import ArtifactLocation
 
 
 class ConversionType(enum.IntEnum):
@@ -54,10 +57,10 @@ class CompressionType(enum.IntEnum):
 
 
 @dataclasses.dataclass(frozen=True)
-class LocalStorageRecord:
-    storage_key: str
-    script_key: str
-    value: str
+class LocalStorageRecord(LocalStorageRecordProtocol):
+    _storage_key: str
+    _script_key: str
+    _value: str
     database_path: pathlib.Path
     sqlite_rowid: int
     value_raw: bytes
@@ -65,9 +68,21 @@ class LocalStorageRecord:
     compression_type: CompressionType
 
     @property
-    def record_location(self) -> str:
+    def storage_key(self) -> str:
+        return self._storage_key
+
+    @property
+    def script_key(self) -> str:
+        return self._script_key
+
+    @property
+    def value(self) -> str:
+        return self._script_key
+
+    @property
+    def record_location(self) -> ArtifactLocation:
         path = pathlib.Path(*self.database_path.parts[-3:])
-        return f"DB: {path}; Rowid: {self.sqlite_rowid}"
+        return ArtifactLocation(str(path), None, f"DB: {path}; Rowid: {self.sqlite_rowid}")
 
 
 class LocalStoreDb:

@@ -12,6 +12,7 @@ from . import ccl_moz_cache
 from . import ccl_moz_indexeddb
 from . import ccl_moz_localstorage
 from . import ccl_moz_sessionstorage
+from .profile_folder_protocols import BrowserProfileProtocol, CacheRecordProtocol, CacheMetadataProtocol
 
 from .common import KeySearch, is_keysearch_hit
 
@@ -21,7 +22,7 @@ __description__ = "Module to consolidate and simplify access to data stores in t
 __contact__ = "Alex Caithness"
 
 
-class CacheResultMetadataProxy:
+class CacheResultMetadataProxy(CacheRecordProtocol):
     # used to align with what goes on in the Chromium module
     def __init__(self, cache_file: ccl_moz_cache.CacheFile):
         self._cache_file = cache_file
@@ -45,7 +46,7 @@ class CacheResultMetadataProxy:
         return getattr(self._cache_file.metadata, item)
 
 
-class CacheResult:
+class CacheResult(CacheRecordProtocol):
     # this Wrapper around a CacheFile object is designed to ducktype with the version in the Chromium module
     def __init__(self, cache_file: ccl_moz_cache.CacheFile, *, decompress_data=True):
         self._cache_file = cache_file
@@ -106,7 +107,7 @@ class CacheResult:
         return self._was_compressed
 
 
-class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
+class MozillaProfileFolder(BrowserProfileProtocol):
     _PLACES_DB_NAME = "places.sqlite"
     _STORAGE_FOLDER_NAME = "storage"
     _DEFAULT_FOLDER_NAME = "default"
@@ -236,7 +237,13 @@ class MozillaProfileFolder:  # TODO: inherit AbstractBrowserProfile
     def iter_indexeddb_records(
             self, host_id: typing.Optional[KeySearch], database_name: typing.Optional[KeySearch] = None,
             object_store_name: typing.Optional[KeySearch] = None, *,
-            raise_on_no_result=False, include_deletions=False):
+            raise_on_no_result=False, include_deletions=False,
+            bad_deserializer_data_handler=None) -> col_abc.Iterable[ccl_moz_indexeddb.MozillaIndexedDbRecord]:
+
+        """self, host_id: typing.Optional[KeySearch], database_name: typing.Optional[KeySearch] = None,
+            object_store_name: typing.Optional[KeySearch] = None, *,
+            raise_on_no_result=False, include_deletions=False,
+            bad_deserializer_data_handler=None) -> col_abc.Iterable[IndexedDbRecordProtocol]:"""
         """
         Iterates indexeddb records in this profile.
 

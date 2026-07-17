@@ -36,6 +36,7 @@ import email
 import collections.abc as col_abc
 
 from .common import KeySearch, is_keysearch_hit
+from .profile_folder_protocols import CacheKeyProtocol
 
 
 __version__ = "0.2"
@@ -162,7 +163,7 @@ class CacheEntryContentType(enum.IntEnum):
     WASM = 6
 
 
-class CacheKey:
+class CacheKey(CacheKeyProtocol):
     # netwerk/cache2/CacheFileUtils.cpp
     def __init__(self, raw_key: str):
         self._raw_key = raw_key
@@ -188,11 +189,11 @@ class CacheKey:
         return self._raw_key.__hash__()
 
     @property
-    def url(self):
+    def url(self) -> str:
         return self._url
 
     @property
-    def raw_key(self):
+    def raw_key(self) -> str:
         return self._raw_key
 
     @staticmethod

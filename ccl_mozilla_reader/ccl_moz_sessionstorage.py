@@ -27,6 +27,7 @@ import typing
 import re
 import collections.abc as col_abc
 from .common import KeySearch, is_keysearch_hit
+from .profile_folder_protocols import SessionStorageRecordProtocol
 from .storage_formats import moz_lz4
 
 
@@ -34,9 +35,11 @@ __version__ = "0.1"
 __description__ = "Library for reading Mozilla Firefox session storage"
 __contact__ = "Alex Caithness"
 
+from .structures import ArtifactLocation
+
 
 @dataclasses.dataclass(frozen=True)
-class SessionStoreRecord:
+class SessionStoreRecord(SessionStorageRecordProtocol):
     host: typing.Optional[str]
     key: str
     value: str
@@ -44,8 +47,8 @@ class SessionStoreRecord:
     origin_file: pathlib.Path
 
     @property
-    def record_location(self) -> str:
-        return f"{self.origin_file.name}"
+    def record_location(self) -> ArtifactLocation:
+        return ArtifactLocation(str(self.origin_file), None, f"{self.origin_file.name}")
 
 
 class SessionStorage:
