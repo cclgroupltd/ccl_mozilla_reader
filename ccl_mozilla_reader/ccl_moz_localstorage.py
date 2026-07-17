@@ -37,7 +37,7 @@ from .common import KeySearch, is_keysearch_hit
 from .profile_folder_protocols import LocalStorageRecordProtocol
 
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 __description__ = "Library for reading Mozilla Firefox local storage"
 __contact__ = "Alex Caithness"
 

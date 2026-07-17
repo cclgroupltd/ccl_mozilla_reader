@@ -34,7 +34,7 @@ from .serialization_formats import ccl_moz_structured_clone_reader
 from .profile_folder_protocols import IndexedDbRecordProtocol
 import ccl_simplesnappy
 
-__version__ = "0.1"
+__version__ = "0.2"
 __description__ = "Library for reading Mozilla Firefox IndexedDB"
 __contact__ = "Alex Caithness"
 

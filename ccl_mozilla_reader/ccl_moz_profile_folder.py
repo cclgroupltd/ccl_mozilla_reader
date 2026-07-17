@@ -17,7 +17,7 @@ from .profile_folder_protocols import BrowserProfileProtocol, CacheRecordProtoco
 from .common import KeySearch, is_keysearch_hit
 
 
-__version__ = "0.1.3"
+__version__ = "0.2"
 __description__ = "Module to consolidate and simplify access to data stores in the Mozilla profile folder"
 __contact__ = "Alex Caithness"
 

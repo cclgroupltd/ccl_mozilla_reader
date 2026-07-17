@@ -39,7 +39,7 @@ from .common import KeySearch, is_keysearch_hit
 from .profile_folder_protocols import CacheKeyProtocol
 
 
-__version__ = "0.2"
+__version__ = "0.3"
 __description__ = "Library for reading Mozilla Firefox Cache (v2 Entries version)"
 __contact__ = "Alex Caithness"
 

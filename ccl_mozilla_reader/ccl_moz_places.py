@@ -35,7 +35,7 @@ import collections.abc as col_abc
 from .common import KeySearch
 from .profile_folder_protocols import HistoryRecordProtocol
 
-__version__ = "0.1"
+__version__ = "0.2"
 __description__ = "Library for reading Mozilla Firefox history and downloads from the places database"
 __contact__ = "Alex Caithness"
 

@@ -27,7 +27,7 @@ import typing
 
 from .profile_folder_protocols import IdbKeyProtocol
 
-__version__ = "0.1"
+__version__ = "0.2"
 __description__ = "Library for reading/parsing IndexedDB Keys from Mozilla Firefox"
 __contact__ = "Alex Caithness"
 

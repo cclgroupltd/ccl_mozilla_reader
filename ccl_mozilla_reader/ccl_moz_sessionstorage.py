@@ -31,7 +31,7 @@ from .profile_folder_protocols import SessionStorageRecordProtocol
 from .storage_formats import moz_lz4
 
 
-__version__ = "0.1"
+__version__ = "0.2"
 __description__ = "Library for reading Mozilla Firefox session storage"
 __contact__ = "Alex Caithness"
 

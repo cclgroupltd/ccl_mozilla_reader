@@ -11,7 +11,7 @@ packages = [
 
 [project]
 name = "ccl_mozilla_reader"
-version = "0.0.10"
+version = "0.0.11"
 authors = [
   { name="Alex Caithness", email="research@cclsolutionsgroup.com" },
 ]
