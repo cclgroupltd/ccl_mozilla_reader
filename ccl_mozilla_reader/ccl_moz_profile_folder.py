@@ -21,6 +21,8 @@ __version__ = "0.2"
 __description__ = "Module to consolidate and simplify access to data stores in the Mozilla profile folder"
 __contact__ = "Alex Caithness"
 
+from .structures import ArtifactLocation
+
 
 class CacheResultMetadataProxy(CacheRecordProtocol):
     # used to align with what goes on in the Chromium module
@@ -88,12 +90,15 @@ class CacheResult(CacheRecordProtocol):
         return self._metadata_proxy
 
     @property
-    def data_location(self):
-        return f"{self._cache_file.path.name} @ 0"
+    def data_location(self) -> ArtifactLocation:
+        return ArtifactLocation(str(self._cache_file.path), 0, f"{self._cache_file.path.name} @ 0")
 
     @property
-    def metadata_location(self):
-        return f"{self._cache_file.path.name} @ {self._cache_file.metadata.offset}"
+    def metadata_location(self) -> ArtifactLocation:
+        return ArtifactLocation(
+            str(self._cache_file.path),
+            self._cache_file.metadata.offset,
+            f"{self._cache_file.path.name} @ {self._cache_file.metadata.offset}")
 
     @property
     def data(self) -> bytes:
