@@ -17,7 +17,7 @@ authors = [
 ]
 description = "(Sometimes partial) Python re-implementations of the technologies involved in reading various data sources in Firefox and some derrived browsers"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -26,6 +26,7 @@ classifiers = [
 ]
 keywords = ["digital forensics", "dfir", "mozilla", "firefox", "browser"]
 dependencies = [
+    "Brotli>=1.0.9,<=1.2.0",
     "lz4==4.3.3",
     "ccl_simplesnappy @ git+https://github.com/cclgroupltd/ccl_simplesnappy.git"
 ]
