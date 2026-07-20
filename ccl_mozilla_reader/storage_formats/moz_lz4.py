@@ -33,7 +33,8 @@ def decompress(compressed: bytes) -> bytes:
         raise ValueError("Data not long enough to contain header")
 
     if compressed[0:len(MAGIC)] != MAGIC:
-        raise ValueError(f"Magic doesn't match. Expected: {MAGIC.hex(" ", 1)}; got: {compressed[0:len(MAGIC)].hex(" ", 1)}")
+        raise ValueError(
+            f"Magic doesn't match. Expected: {MAGIC.hex(' ', 1)}; got: {compressed[0:len(MAGIC)].hex(' ', 1)}")
 
     length_offset = len(MAGIC)
     decompressed_length, = struct.unpack("<I", compressed[length_offset: length_offset + 4])
