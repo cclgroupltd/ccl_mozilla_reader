@@ -173,19 +173,19 @@ class StructuredDataType(enum.IntEnum):
     REGEXP_OBJECT = enum.auto()
     ARRAY_OBJECT = enum.auto()
     OBJECT_OBJECT = enum.auto()
-    ARRAY_BUFFER_OBJECT_V2 = enum.auto(),  # Old version, for backwards compatibility.
+    ARRAY_BUFFER_OBJECT_V2 = enum.auto()  # Old version, for backwards compatibility.
     BOOLEAN_OBJECT = enum.auto()
     STRING_OBJECT = enum.auto()
     NUMBER_OBJECT = enum.auto()
     BACK_REFERENCE_OBJECT = enum.auto()
-    DO_NOT_USE_1 = enum.auto(),  # Required for backwards compatibility
-    DO_NOT_USE_2 = enum.auto(),  # Required for backwards compatibility
-    TYPED_ARRAY_OBJECT_V2 = enum.auto(),  # Old version, for backwards compatibility.
+    DO_NOT_USE_1 = enum.auto()  # Required for backwards compatibility
+    DO_NOT_USE_2 = enum.auto()  # Required for backwards compatibility
+    TYPED_ARRAY_OBJECT_V2 = enum.auto()  # Old version, for backwards compatibility.
     MAP_OBJECT = enum.auto()
     SET_OBJECT = enum.auto()
     END_OF_KEYS = enum.auto()
-    DO_NOT_USE_3 = enum.auto(),  # Required for backwards compatibility
-    DATA_VIEW_OBJECT_V2 = enum.auto(),  # Old version, for backwards compatibility.
+    DO_NOT_USE_3 = enum.auto()  # Required for backwards compatibility
+    DATA_VIEW_OBJECT_V2 = enum.auto()  # Old version, for backwards compatibility.
     SAVED_FRAME_OBJECT = enum.auto()
 
     # No new tags before principals.
